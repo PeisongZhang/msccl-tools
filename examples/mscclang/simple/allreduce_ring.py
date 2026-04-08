@@ -8,6 +8,26 @@ from msccl.topologies import *
 from msccl.collectives import *
 from msccl.language.collectives import AllReduce
 
+def allreduce_ring_impl(size):
+    for r in range(size):
+        index = r
+        # (rank, buffer, index)
+        c = chunk(r, Buffer.input, index)
+        next = (r + 1) % size
+        # Chunk travels around the ring being reduced
+        while next != r:
+            c1 = chunk(next, buffer=Buffer.input, index=r)
+            # c1 += c
+            c = c1.reduce(c)
+            next = (next + 1) % size
+        
+        # Send the fully reduced chunk around the ring
+        while next != (r - 1) % size:
+            c = c.copy(next, buffer=Buffer.input, index=r)
+            next = (next + 1) % size
+
+
+
 
 def allreduce_ring(size, instances):
     # Logical topology
@@ -15,23 +35,7 @@ def allreduce_ring(size, instances):
     collective = AllReduce(size, size, inplace=True)
 
     with MSCCLProgram("allreduce_ring_inplace", topology, collective, instances):
-        for r in range(size):
-            index = r
-            # (rank, buffer, index)
-            c = chunk(r, Buffer.input, index)
-            next = (r + 1) % size
-            # Chunk travels around the ring being reduced
-            while next != r:
-                c1 = chunk(next, buffer=Buffer.input, index=r)
-                # c1 += c
-                c = c1.reduce(c)
-                next = (next + 1) % size
-            
-            # Send the fully reduced chunk around the ring
-            while next != (r - 1) % size:
-                c = c.copy(next, buffer=Buffer.input, index=r)
-                next = (next + 1) % size
-
+        allreduce_ring_impl(size)
         Check()
         XML()
 
